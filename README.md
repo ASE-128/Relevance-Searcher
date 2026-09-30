@@ -205,3 +205,22 @@ pwsh -File scripts/bootstrap-vendor.ps1        # 可选：重建 _vendored（42 
 pwsh -File scripts/bootstrap-runtime.ps1       # 可选：重建便携 CPython 3.12.3
 python tests/test_searcher_regression.py       # 回归基准，必须全绿再提交
 ```
+
+## 提交前门（Git 钩子）
+
+`hooks/` 通过 `core.hooksPath` 生效（随仓库版本化，不往 `.git/hooks` 里拷文件）：
+
+| 钩子 | 做什么 | 跳过方式 |
+|------|--------|----------|
+| `hooks/pre-commit` | 跑 `tests/test_units.py`（32 条离线断言，约 0.02s、零网络），失败即阻止提交 | `git commit --no-verify` 或 `SKIP_UNIT_TESTS=1 git commit ...` |
+| `hooks/pre-push` | 跑 `scripts/check_entry.py`：确认 `server` 可导入且仍注册 4 个工具，防止拆分/改名把入口弄断 | `git push --no-verify` 或 `SKIP_IMPORT_CHECK=1 git push` |
+
+安装（一次即可，仅影响本仓库）：
+
+```powershell
+pwsh -File scripts/install-git-hooks.ps1              # 等价于 git config core.hooksPath hooks
+pwsh -File scripts/install-git-hooks.ps1 -Uninstall    # 卸载，回到 .git/hooks
+```
+
+需要联网的 `tests/test_searcher_regression.py` **不进钩子**，手动运行即可 —— 它的耗时可随网络波动，塞进提交路径只会逼人天天 `--no-verify`。
+调试钩子时可用 `UNIT_TEST_FILE=...` 指向别的测试文件。

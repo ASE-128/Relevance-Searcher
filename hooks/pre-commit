@@ -1,0 +1,44 @@
+#!/bin/sh
+# 提交前门：离线单测（零网络、约 20ms）
+#
+# 跳过方式：
+#   git commit --no-verify
+#   SKIP_UNIT_TESTS=1 git commit -m "..."
+# 换测试文件（便于调试 / CI 复用）：
+#   UNIT_TEST_FILE=tests/test_searcher_regression.py git commit -m "..."   # 该文件需要联网
+
+export PYTHONIOENCODING=utf-8
+
+if [ "${SKIP_UNIT_TESTS:-0}" = "1" ]; then
+    echo "[pre-commit] SKIP_UNIT_TESTS=1，跳过离线单测"
+    exit 0
+fi
+
+root="$(git rev-parse --show-toplevel)" || exit 1
+cd "$root" || exit 1
+
+test_file="${UNIT_TEST_FILE:-tests/test_units.py}"
+if [ ! -f "$test_file" ]; then
+    echo "[pre-commit] 找不到 $test_file，跳过（提交未验证）"
+    exit 0
+fi
+
+if [ -x "runtime/python/python.exe" ]; then
+    PY="./runtime/python/python.exe"
+elif [ -x "runtime/python/python" ]; then
+    PY="./runtime/python/python"
+elif command -v python3 >/dev/null 2>&1; then
+    PY="python3"
+elif command -v python >/dev/null 2>&1; then
+    PY="python"
+else
+    echo "[pre-commit] 未找到可用 Python，跳过离线单测（提交未验证）"
+    exit 0
+fi
+
+echo "[pre-commit] $PY $test_file"
+if "$PY" "$test_file"; then
+    exit 0
+fi
+echo "[pre-commit] 离线单测未通过，提交已阻止（--no-verify 可跳过，但不建议）"
+exit 1
