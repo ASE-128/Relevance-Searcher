@@ -1,0 +1,22 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ── 生成物 / 临时文件 ──
+mcp-clients.json
+*.log
+*.bak
+.DS_Store
+Thumbs.db
+
+# ── 可重建的第三方运行时（用 scripts/ 下的脚本重建） ──
+_vendored/
+runtime/
+
+# ── 编辑器 ──
+.vscode/
+.idea/
+
+# 注意：semantic-relevance/ 与 SearXNGforWindows/ 是 submodule，
+# 不要写进这里，否则 gitlink 无法登记。

@@ -1,0 +1,262 @@
+diff --git a/SearXNG for Windows.bat b/SearXNG for Windows.bat
+index eab47dc..e16c0a0 100644
+--- a/SearXNG for Windows.bat	
++++ b/SearXNG for Windows.bat	
+@@ -3,19 +3,24 @@ title SearXNG for Windows
+ echo Starting SearXNG for Windows...
+ 
+ :: 检查是否存在 python.exe 和 webapp.py
+-if not exist ".\python\python.exe" (
++if not exist "%~dp0python\python.exe" (
+     echo Error: python.exe not found in the current directory.
+     pause
+     exit /b
+ )
+ 
+-if not exist ".\python\Lib\site-packages\searx\webapp.py" (
++if not exist "%~dp0python\Lib\site-packages\searx\webapp.py" (
+     echo Error: webapp.py not found in the specified path.
+     pause
+     exit /b
+ )
+ 
++:: 显式指定 settings.yml 路径，确保使用仓库中的配置
++set "SEARXNG_SETTINGS_PATH=%~dp0config\settings.yml"
++echo Using settings: %SEARXNG_SETTINGS_PATH%
++
+ :: 启动 Searx
++cd /d "%~dp0"
+ .\python\python.exe .\python\Lib\site-packages\searx\webapp.py
+ 
+ pause
+\ No newline at end of file
+diff --git a/python/Lib/site-packages/searx/data/useragents.json b/python/Lib/site-packages/searx/data/useragents.json
+index 6b806e3..0483e7f 100644
+--- a/python/Lib/site-packages/searx/data/useragents.json
++++ b/python/Lib/site-packages/searx/data/useragents.json
+@@ -1,11 +1 @@
+-{
+-    "os": [
+-        "Windows NT 10.0; Win64; x64",
+-        "X11; Linux x86_64"
+-    ],
+-    "ua": "Mozilla/5.0 ({os}; rv:{version}) Gecko/20100101 Firefox/{version}",
+-    "versions": [
+-        "138.0",
+-        "137.0"
+-    ]
+-}
+\ No newline at end of file
++{"os": ["Windows NT 10.0; Win64; x64", "X11; Linux x86_64", "Windows NT 10.0; Win64; x64"], "ua": "Mozilla/5.0 ({os}; rv:{version}) Gecko/20100101 Firefox/{version}", "versions": ["138.0", "137.0", "126.0.0.0", "125.0.0.0", "127.0.0.0"]}
+\ No newline at end of file
+diff --git a/python/Lib/site-packages/searx/engines/360search.py b/python/Lib/site-packages/searx/engines/360search.py
+index 5bc123b..38e9c0e 100644
+--- a/python/Lib/site-packages/searx/engines/360search.py
++++ b/python/Lib/site-packages/searx/engines/360search.py
+@@ -37,6 +37,17 @@ def request(query, params):
+     if time_range_dict.get(params['time_range']):
+         query_params["adv_t"] = time_range_dict.get(params['time_range'])
+ 
++    # 模拟浏览器请求头
++    params['headers']['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
++    params['headers']['Accept-Language'] = 'zh-CN,zh;q=0.9,en;q=0.8'
++    params['headers']['Referer'] = 'https://www.so.com/'
++    params['headers']['DNT'] = '1'
++    params['headers']['Connection'] = 'keep-alive'
++    params['headers']['Sec-Fetch-Dest'] = 'document'
++    params['headers']['Sec-Fetch-Mode'] = 'navigate'
++    params['headers']['Sec-Fetch-Site'] = 'same-origin'
++    params['headers']['Upgrade-Insecure-Requests'] = '1'
++
+     params["url"] = f"{base_url}/s?{urlencode(query_params)}"
+     return params
+ 
+diff --git a/python/Lib/site-packages/searx/engines/baidu.py b/python/Lib/site-packages/searx/engines/baidu.py
+index 29c9c0e..a01d69f 100644
+--- a/python/Lib/site-packages/searx/engines/baidu.py
++++ b/python/Lib/site-packages/searx/engines/baidu.py
+@@ -12,6 +12,8 @@ from datetime import datetime
+ from html import unescape
+ import time
+ import json
++import hashlib
++import random
+ 
+ from searx.exceptions import SearxEngineAPIException
+ from searx.utils import html_to_text
+@@ -26,6 +28,7 @@ about = {
+     "language": "zh",
+ }
+ 
++weight = 150
+ paging = True
+ categories = []
+ results_per_page = 10
+@@ -41,9 +44,31 @@ def init(_):
+         raise SearxEngineAPIException(f"Unsupported category: {baidu_category}")
+ 
+ 
++def _make_baiduid_cookie() -> str:
++    """生成一个形似真实浏览器首次访问的 BAIDUID cookie，降低被强制跳转到 wappass 的概率"""
++    uid = hashlib.md5(("baidu%f" % random.random()).encode()).hexdigest()
++    return f"BAIDUID={uid}:FG=1; BIDUPSID={uid}; BAIDUID_BFESS={uid}:FG=1;"
++
+ def request(query, params):
+     page_num = params["pageno"]
+ 
++    # 模拟浏览器请求头（增强，降低被反爬拦截概率）
++    params['headers']['User-Agent'] = (
++        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
++        '(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
++    )
++    params['headers']['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8,application/json;q=0.9'
++    params['headers']['Accept-Language'] = 'zh-CN,zh;q=0.9,en;q=0.8'
++    params['headers']['Referer'] = 'https://www.baidu.com/'
++    params['headers']['DNT'] = '1'
++    params['headers']['Connection'] = 'keep-alive'
++    params['headers']['Sec-Fetch-Dest'] = 'document'
++    params['headers']['Sec-Fetch-Mode'] = 'navigate'
++    params['headers']['Sec-Fetch-Site'] = 'same-origin'
++    params['headers']['Upgrade-Insecure-Requests'] = '1'
++    if 'Cookie' not in params['headers']:
++        params['headers']['Cookie'] = _make_baiduid_cookie()
++
+     category_config = {
+         'general': {
+             'endpoint': 'https://www.baidu.com/s',
+@@ -98,7 +123,11 @@ def response(resp):
+     if baidu_category == 'images':
+         # baidu's JSON encoder wrongly quotes / and ' characters by \\ and \'
+         text = text.replace(r"\/", "/").replace(r"\'", "'")
+-    data = json.loads(text, strict=False)
++    try:
++        data = json.loads(text, strict=False)
++    except json.JSONDecodeError:
++        # 反爬拦截时 baidu 返回的是 wappass 安全验证页（HTML），不是 JSON，直接视为无结果
++        return []
+     parsers = {'general': parse_general, 'images': parse_images, 'it': parse_it}
+ 
+     return parsers[baidu_category](data)
+diff --git a/python/Lib/site-packages/searx/engines/bing.py b/python/Lib/site-packages/searx/engines/bing.py
+index 47e8bb6..9f0bebb 100644
+--- a/python/Lib/site-packages/searx/engines/bing.py
++++ b/python/Lib/site-packages/searx/engines/bing.py
+@@ -59,6 +59,7 @@ about = {
+ categories = ['general', 'web']
+ paging = True
+ max_page = 200
++weight = 80
+ """200 pages maximum (``&first=1991``)"""
+ 
+ time_range_support = True
+diff --git a/python/Lib/site-packages/searx/engines/quark.py b/python/Lib/site-packages/searx/engines/quark.py
+index 1c2e844..4b6044d 100644
+--- a/python/Lib/site-packages/searx/engines/quark.py
++++ b/python/Lib/site-packages/searx/engines/quark.py
+@@ -23,6 +23,7 @@ about = {
+ categories = []
+ paging = True
+ results_per_page = 10
++weight = 130
+ 
+ quark_category = 'general'
+ 
+@@ -77,9 +78,17 @@ def request(query, params):
+         query_params["tl_request"] = time_range_dict.get(params['time_range'])
+ 
+     params["url"] = f"{query_url}?{urlencode(query_params)}"
+-    params["headers"] = {
+-        "User-Agent": gen_useragent(),
+-    }
++    # 模拟浏览器请求头（保留原有 headers 避免覆盖）
++    params['headers']['User-Agent'] = gen_useragent()
++    params['headers']['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
++    params['headers']['Accept-Language'] = 'zh-CN,zh;q=0.9,en;q=0.8'
++    params['headers']['Referer'] = 'https://quark.sm.cn/'
++    params['headers']['DNT'] = '1'
++    params['headers']['Connection'] = 'keep-alive'
++    params['headers']['Sec-Fetch-Dest'] = 'document'
++    params['headers']['Sec-Fetch-Mode'] = 'navigate'
++    params['headers']['Sec-Fetch-Site'] = 'same-origin'
++    params['headers']['Upgrade-Insecure-Requests'] = '1'
+     return params
+ 
+ 
+@@ -291,6 +300,17 @@ def parse_nature_result(data):
+     return {"title": html_to_text(data.get('title')), "url": data.get('url'), "content": html_to_text(data.get('desc'))}
+ 
+ 
++def _to_text(value):
++    """兼容 quark 返回的 title/content 字段：可能是 str，也可能是 {content:...} 字典"""
++    if isinstance(value, dict):
++        value = value.get('content') or value.get('title') or ''
++    if value is None:
++        return ''
++    if not isinstance(value, str):
++        value = str(value)
++    return value
++
++
+ def parse_news_uchq(data):
+     results = []
+     for item in data.get('feed', []):
+@@ -329,17 +349,17 @@ def parse_ss_doc(data):
+         thumbnail = None
+ 
+     return {
+-        "title": html_to_text(
++        "title": html_to_text(_to_text(
+             data.get('titleProps', {}).get('content')
+             # ss_kv variant 1 & 2
+             or data.get('title')
+-        ),
++        )),
+         "url": data.get('sourceProps', {}).get('dest_url')
+         # ss_kv variant 1
+         or data.get('normal_url')
+         # ss_kv variant 2
+         or data.get('url'),
+-        "content": html_to_text(
++        "content": html_to_text(_to_text(
+             data.get('summaryProps', {}).get('content')
+             # ss_doc variant 1
+             or data.get('message', {}).get('replyContent')
+@@ -347,7 +367,7 @@ def parse_ss_doc(data):
+             or data.get('show_body')
+             # ss_kv variant 2
+             or data.get('desc')
+-        ),
++        )),
+         "publishedDate": published_date,
+         "thumbnail": thumbnail,
+     }
+diff --git a/python/Lib/site-packages/searx/engines/sogou.py b/python/Lib/site-packages/searx/engines/sogou.py
+index 6fb9702..778d7df 100644
+--- a/python/Lib/site-packages/searx/engines/sogou.py
++++ b/python/Lib/site-packages/searx/engines/sogou.py
+@@ -20,6 +20,7 @@ about = {
+ categories = ["general"]
+ paging = True
+ time_range_support = True
++weight = 130
+ 
+ time_range_dict = {'day': 'inttime_day', 'week': 'inttime_week', 'month': 'inttime_month', 'year': 'inttime_year'}
+ 
+@@ -37,6 +38,17 @@ def request(query, params):
+         query_params["s_from"] = time_range_dict.get(params['time_range'])
+         query_params["tsn"] = 1
+ 
++    # 模拟浏览器请求头
++    params['headers']['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
++    params['headers']['Accept-Language'] = 'zh-CN,zh;q=0.9,en;q=0.8'
++    params['headers']['Referer'] = 'https://www.sogou.com/'
++    params['headers']['DNT'] = '1'
++    params['headers']['Connection'] = 'keep-alive'
++    params['headers']['Sec-Fetch-Dest'] = 'document'
++    params['headers']['Sec-Fetch-Mode'] = 'navigate'
++    params['headers']['Sec-Fetch-Site'] = 'same-origin'
++    params['headers']['Upgrade-Insecure-Requests'] = '1'
++
+     params["url"] = f"{base_url}/web?{urlencode(query_params)}"
+     return params
+ 
