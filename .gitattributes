@@ -1,0 +1,14 @@
+# 行尾统一策略：仓库内存 LF，检出时按平台转换（Windows 上是 CRLF）
+* text=auto
+
+# Windows 脚本必须以 CRLF 检出，否则 cmd.exe / PowerShell 解析可能异常
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制（不要做行尾转换）
+*.png  binary
+*.jpg  binary
+*.zip  binary
+*.exe  binary
+*.dll  binary
