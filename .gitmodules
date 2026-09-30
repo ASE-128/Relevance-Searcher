@@ -1,0 +1,7 @@
+[submodule "semantic-relevance"]
+	path = semantic-relevance
+	url = https://github.com/M4n1shG/semantic-relevance.git
+[submodule "SearXNGforWindows"]
+	path = SearXNGforWindows
+	url = https://github.com/mbaozi/SearXNGforWindows.git
+	ignore = dirty
