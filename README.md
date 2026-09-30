@@ -6,12 +6,24 @@
 
 ```
 mcp-server-dev/
-├── server.py           # MCP 服务器入口（FastMCP）+ SearXNG 自动拉起
-├── searcher.py         # 搜索引擎核心（多引擎并行 + 质量过滤 + 相关性评分）
+├── server.py           # MCP 入口：引导解释器 → 注册 4 个工具 → 启动 stdio（薄壳）
+├── bootstrap.py        # 解释器引导：_vendored / pywin32 注入 sys.path（必须先于三方导入）
+├── config.py           # 路径与运行参数（os.environ 读取点唯一化）
+├── tools.py            # 工具纯逻辑：参数规整 → 检索调用 → 渲染（不依赖 FastMCP）
+├── webpage.py          # 网页正文抓取（解码回退 + 正文提取，纯函数可单测）
+├── searxng_runtime.py  # 本地 SearXNG 生命周期（就绪探测 / 自动拉起）
+├── searxng_client.py   # SearXNG JSON API 客户端
+├── client_config.py    # mcp-clients.json 生成与幂等回写
+├── pipeline.py         # 检索管线编排（WebSearcher + searcher 单例）
+├── textutil.py         # 分词 / 查询归一 / 日期抽取 / 去重 / 结果富化
+├── filters.py          # 域名黑名单、词典/天气等参考类站点守卫、质量预过滤
+├── scoring.py          # 查询-结果相关性评分
+├── formatting.py       # 结果渲染（LLM 上下文文本 / JSON）
+├── searcher.py         # 兼容外观层：旧导入路径仍可用，实现已拆到上述模块
 ├── __init__.py         # 包定义
 ├── __main__.py         # python -m 启动入口
 ├── run-server.cmd      # 便携启动器（首选 runtime 解释器，缺失则回退 PATH）
-├── tests/              # 回归基准（test_searcher_regression.py）
+├── tests/              # test_units.py（离线单测）+ test_searcher_regression.py（联网回归）
 ├── scripts/            # 依赖重建与 SearXNG overlay 应用脚本
 ├── overlays/searxng/   # 本项目对 SearXNG 的定制（settings.yml + 引擎补丁）
 ├── _vendored/          # 内嵌第三方依赖（不入库，可由锁文件重建）
@@ -156,11 +168,11 @@ python d:\mcp-server-dev\server.py
 ## 工作原理
 
 - `server.py` 启动时：
-  1. 将 `_vendored/` 及 pywin32 子路径插入 `sys.path`（零依赖运行的前提）。
-  2. 通过 `_ensure_searxng()` 探测并拉起本地 SearXNG（`/healthz` 可达即跳过）。
+  1. `bootstrap.ensure_sys_path()` 把 `_vendored/` 及 pywin32 子路径插入 `sys.path`（零依赖运行的前提，必须先于任何三方导入）。
+  2. `searxng_runtime.ensure_running()` 探测并拉起本地 SearXNG（`/healthz` 可达即跳过）。
   3. 以 stdio 模式运行 FastMCP，注册 `web_search` / `search_multi` / `search_format` / `fetch_page` 四个工具。
      `web_search` 额外支持 `engines` / `time_range` / `dedup` / `rewrite` / `sort_by`，默认值与旧行为一致。
-- `searcher.py` 独立实现多引擎并行搜索 + 三级过滤管线 + 学术排序。
+- `pipeline.py` 实现多引擎并行搜索 + 三级过滤管线 + 学术排序；`tools.py` 只做参数规整与渲染，`searcher.py` 保留为兼容外观层。
 - SearXNG 使用捆绑 Python **3.11**（与 `_vendored` 的 3.12 不同），两者解释器分离，勿混用。
 
 ## 更多资料
