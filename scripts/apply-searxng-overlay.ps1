@@ -28,11 +28,17 @@ if (Test-Path $settings) {
 }
 
 if (Test-Path $patch) {
-    git -C $searx apply --check $patch 2>$null
+    # --ignore-whitespace: 该 submodule 的 core.autocrlf=true，工作区是 CRLF 而补丁上下文是 LF
+    git -C $searx apply --check --ignore-whitespace $patch 2>$null
     if ($LASTEXITCODE -eq 0) {
-        git -C $searx apply $patch
+        git -C $searx apply --ignore-whitespace $patch
         Write-Host "[overlay] 引擎补丁已应用"
     } else {
-        Write-Host "[overlay] 引擎补丁未应用（已打过或与上游冲突，请人工确认）"
+        git -C $searx apply --check --reverse --ignore-whitespace $patch 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[overlay] 引擎补丁此前已应用，无需重复"
+        } else {
+            Write-Host "[overlay] 引擎补丁无法应用（与上游版本冲突或工作区已被改动），请人工确认"
+        }
     }
 }
